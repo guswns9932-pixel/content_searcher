@@ -46,3 +46,16 @@ python content_searcher.py
 2. 검색 키워드를 입력하고 필요한 옵션(하위 폴더, 대소문자, 정규식, 파일명/내용)을 선택합니다.
 3. "검색 시작"을 누르면 결과가 실시간으로 표에 채워집니다.
 4. 결과를 더블클릭하면 파일이 열리고, "CSV 저장"으로 결과를 내보낼 수 있습니다.
+
+## 테스트
+
+각 파일 형식 파서와 검색/스니펫 로직에 대한 단위 테스트가 `tests/`에 있습니다.
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+선택적 라이브러리(PyMuPDF, openpyxl, python-docx, python-pptx, xlrd/xlwt)가 설치되어 있지 않으면
+해당 형식 테스트는 자동으로 건너뜁니다(skip). GUI 동작 자체는 자동 테스트 대상이 아니며,
+Xvfb 등 가상 디스플레이 환경에서 수동으로 확인했습니다.
