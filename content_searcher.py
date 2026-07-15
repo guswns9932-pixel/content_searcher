@@ -457,6 +457,8 @@ class ContentSearchApp(tk.Tk):
             self.tree.delete(item)
         self.result_paths.clear()
         self.status_var.set("결과를 초기화했습니다.")
+        self.progress.stop()
+        self.progress.configure(mode="determinate")
         self.progress["value"] = 0
 
     def start_search(self):
@@ -493,8 +495,9 @@ class ContentSearchApp(tk.Tk):
         self.cancel_event.clear()
         self.search_button.configure(state="disabled")
         self.stop_button.configure(state="normal")
-        self.status_var.set("파일 목록을 확인하는 중입니다...")
-        self.progress["value"] = 0
+        self.status_var.set("검색을 시작합니다...")
+        self.progress.configure(mode="indeterminate")
+        self.progress.start(10)
 
         options = {
             "folder": Path(folder),
@@ -515,18 +518,17 @@ class ContentSearchApp(tk.Tk):
         self.cancel_event.set()
         self.status_var.set("검색 중지 요청을 처리하는 중입니다...")
 
-    def _collect_files(self, folder, include_subfolders):
+    def _iter_files(self, folder, include_subfolders):
+        """폴더를 순회하며 파일을 찾는 즉시 하나씩 내보낸다(전체 목록을 먼저 모으지 않음)."""
         iterator = folder.rglob("*") if include_subfolders else folder.glob("*")
-        files = []
         for path in iterator:
             if self.cancel_event.is_set():
-                break
+                return
             try:
                 if path.is_file():
-                    files.append(path)
+                    yield path
             except OSError:
                 continue
-        return files
 
     def _search_worker(self, options):
         folder = options["folder"]
@@ -537,19 +539,17 @@ class ContentSearchApp(tk.Tk):
 
         matched_files = set()
         total_hits = 0
+        processed = 0
         errors = []
 
         try:
-            files = self._collect_files(folder, include_subfolders)
-            total = len(files)
-            self.task_queue.put(("total", total))
-
-            for index, path in enumerate(files, start=1):
+            for path in self._iter_files(folder, include_subfolders):
                 if self.cancel_event.is_set():
-                    self.task_queue.put(("cancelled", index - 1, total, total_hits, len(matched_files), errors))
+                    self.task_queue.put(("cancelled", processed, total_hits, len(matched_files), errors))
                     return
 
-                self.task_queue.put(("progress", index, total, str(path)))
+                processed += 1
+                self.task_queue.put(("progress", processed, str(path)))
 
                 try:
                     # 파일명 검색
@@ -587,7 +587,10 @@ class ContentSearchApp(tk.Tk):
                 except Exception as exc:
                     errors.append(f"{path} | {exc}")
 
-            self.task_queue.put(("done", total, total_hits, len(matched_files), errors))
+            if self.cancel_event.is_set():
+                self.task_queue.put(("cancelled", processed, total_hits, len(matched_files), errors))
+            else:
+                self.task_queue.put(("done", processed, total_hits, len(matched_files), errors))
 
         except Exception as exc:
             self.task_queue.put(("fatal", str(exc), traceback.format_exc()))
@@ -598,15 +601,9 @@ class ContentSearchApp(tk.Tk):
                 event = self.task_queue.get_nowait()
                 kind = event[0]
 
-                if kind == "total":
-                    total = event[1]
-                    self.progress["maximum"] = max(total, 1)
-                    self.status_var.set(f"총 {total:,}개 파일을 검색합니다.")
-
-                elif kind == "progress":
-                    index, total, path = event[1], event[2], event[3]
-                    self.progress["value"] = index
-                    self.status_var.set(f"{index:,}/{total:,} 검색 중: {Path(path).name}")
+                if kind == "progress":
+                    index, path = event[1], event[2]
+                    self.status_var.set(f"{index:,}개 확인 중: {Path(path).name}")
 
                 elif kind == "result":
                     _, name, ext, location, snippet, path = event
@@ -618,22 +615,27 @@ class ContentSearchApp(tk.Tk):
                     self.result_paths[iid] = path
 
                 elif kind == "done":
-                    total, hit_count, file_count, errors = event[1], event[2], event[3], event[4]
+                    processed, hit_count, file_count, errors = event[1], event[2], event[3], event[4]
                     self.search_button.configure(state="normal")
                     self.stop_button.configure(state="disabled")
+                    self.progress.stop()
+                    self.progress.configure(mode="determinate")
                     self.progress["value"] = self.progress["maximum"]
                     self.status_var.set(
-                        f"완료: {total:,}개 파일 검사 / {file_count:,}개 파일 일치 / {hit_count:,}건 발견"
+                        f"완료: {processed:,}개 파일 검사 / {file_count:,}개 파일 일치 / {hit_count:,}건 발견"
                     )
                     if errors:
                         self._show_error_summary(errors)
 
                 elif kind == "cancelled":
-                    done_count, total, hit_count, file_count, errors = event[1], event[2], event[3], event[4], event[5]
+                    processed, hit_count, file_count, errors = event[1], event[2], event[3], event[4]
                     self.search_button.configure(state="normal")
                     self.stop_button.configure(state="disabled")
+                    self.progress.stop()
+                    self.progress.configure(mode="determinate")
+                    self.progress["value"] = 0
                     self.status_var.set(
-                        f"중지됨: {done_count:,}/{total:,}개 검사 / {file_count:,}개 파일 일치 / {hit_count:,}건 발견"
+                        f"중지됨: {processed:,}개 검사 / {file_count:,}개 파일 일치 / {hit_count:,}건 발견"
                     )
                     if errors:
                         self._show_error_summary(errors)
@@ -642,6 +644,9 @@ class ContentSearchApp(tk.Tk):
                     message, detail = event[1], event[2]
                     self.search_button.configure(state="normal")
                     self.stop_button.configure(state="disabled")
+                    self.progress.stop()
+                    self.progress.configure(mode="determinate")
+                    self.progress["value"] = 0
                     self.status_var.set("오류로 검색이 중단되었습니다.")
                     messagebox.showerror("검색 오류", f"{message}\n\n{detail}")
 
