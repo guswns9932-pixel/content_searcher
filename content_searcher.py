@@ -322,6 +322,26 @@ def build_pattern(keyword, use_regex, case_sensitive):
     return re.compile(expression, flags)
 
 
+def parse_extension_filter(text):
+    """
+    "txt, .pdf *.docx" 같은 입력을 {'.txt', '.pdf', '.docx'} 형태로 정규화한다.
+    비어 있으면 빈 집합(필터 없음, 전체 검색)을 반환한다.
+    """
+    if not text:
+        return set()
+
+    tokens = re.split(r"[,;\s]+", text.strip())
+    extensions = set()
+    for token in tokens:
+        token = token.strip().lstrip("*")
+        if not token:
+            continue
+        if not token.startswith("."):
+            token = "." + token
+        extensions.add(token.lower())
+    return extensions
+
+
 def open_path(path):
     """Windows에서는 기본 연결 프로그램으로 파일을 연다."""
     path = str(path)
@@ -348,6 +368,7 @@ class ContentSearchApp(tk.Tk):
 
         self.folder_var = tk.StringVar()
         self.keyword_var = tk.StringVar()
+        self.extension_var = tk.StringVar()
         self.subfolder_var = tk.BooleanVar(value=True)
         self.case_sensitive_var = tk.BooleanVar(value=False)
         self.regex_var = tk.BooleanVar(value=False)
@@ -377,8 +398,16 @@ class ContentSearchApp(tk.Tk):
         keyword_entry.grid(row=1, column=1, sticky="ew", pady=5)
         keyword_entry.bind("<Return>", lambda event: self.start_search())
 
+        ttk.Label(search_frame, text="확장자 필터").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=5)
+        extension_entry = ttk.Entry(search_frame, textvariable=self.extension_var)
+        extension_entry.grid(row=2, column=1, sticky="ew", pady=5)
+        extension_entry.bind("<Return>", lambda event: self.start_search())
+        ttk.Label(search_frame, text="예: txt, pdf (비워두면 전체)", foreground="gray").grid(
+            row=2, column=2, sticky="w", padx=(8, 0), pady=5
+        )
+
         option_frame = ttk.Frame(search_frame)
-        option_frame.grid(row=2, column=1, columnspan=2, sticky="w", pady=(4, 0))
+        option_frame.grid(row=3, column=1, columnspan=2, sticky="w", pady=(4, 0))
 
         ttk.Checkbutton(option_frame, text="하위 폴더 포함", variable=self.subfolder_var).pack(side="left", padx=(0, 12))
         ttk.Checkbutton(option_frame, text="대소문자 구분", variable=self.case_sensitive_var).pack(side="left", padx=(0, 12))
@@ -491,6 +520,8 @@ class ContentSearchApp(tk.Tk):
             messagebox.showerror("정규식 오류", f"정규식이 올바르지 않습니다.\n\n{exc}")
             return
 
+        extensions = parse_extension_filter(self.extension_var.get())
+
         self.clear_results()
         self.cancel_event.clear()
         self.search_button.configure(state="disabled")
@@ -505,6 +536,7 @@ class ContentSearchApp(tk.Tk):
             "include_subfolders": self.subfolder_var.get(),
             "search_filename": self.filename_var.get(),
             "search_contents": self.contents_var.get(),
+            "extensions": extensions,
         }
 
         self.worker = threading.Thread(
@@ -518,15 +550,18 @@ class ContentSearchApp(tk.Tk):
         self.cancel_event.set()
         self.status_var.set("검색 중지 요청을 처리하는 중입니다...")
 
-    def _iter_files(self, folder, include_subfolders):
+    def _iter_files(self, folder, include_subfolders, extensions=None):
         """폴더를 순회하며 파일을 찾는 즉시 하나씩 내보낸다(전체 목록을 먼저 모으지 않음)."""
         iterator = folder.rglob("*") if include_subfolders else folder.glob("*")
         for path in iterator:
             if self.cancel_event.is_set():
                 return
             try:
-                if path.is_file():
-                    yield path
+                if not path.is_file():
+                    continue
+                if extensions and path.suffix.lower() not in extensions:
+                    continue
+                yield path
             except OSError:
                 continue
 
@@ -536,6 +571,7 @@ class ContentSearchApp(tk.Tk):
         include_subfolders = options["include_subfolders"]
         search_filename = options["search_filename"]
         search_contents = options["search_contents"]
+        extensions = options["extensions"]
 
         matched_files = set()
         total_hits = 0
@@ -543,7 +579,7 @@ class ContentSearchApp(tk.Tk):
         errors = []
 
         try:
-            for path in self._iter_files(folder, include_subfolders):
+            for path in self._iter_files(folder, include_subfolders, extensions):
                 if self.cancel_event.is_set():
                     self.task_queue.put(("cancelled", processed, total_hits, len(matched_files), errors))
                     return

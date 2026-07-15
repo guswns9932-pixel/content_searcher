@@ -66,6 +66,24 @@ def test_build_pattern_invalid_regex_raises():
         cs.build_pattern("(", use_regex=True, case_sensitive=True)
 
 
+def test_parse_extension_filter_empty_means_no_filter():
+    assert cs.parse_extension_filter("") == set()
+    assert cs.parse_extension_filter("   ") == set()
+
+
+def test_parse_extension_filter_normalizes_various_forms():
+    assert cs.parse_extension_filter("txt") == {".txt"}
+    assert cs.parse_extension_filter(".txt") == {".txt"}
+    assert cs.parse_extension_filter("*.txt") == {".txt"}
+    assert cs.parse_extension_filter("TXT") == {".txt"}
+
+
+def test_parse_extension_filter_multiple_tokens():
+    assert cs.parse_extension_filter("txt, pdf .docx  xlsx") == {
+        ".txt", ".pdf", ".docx", ".xlsx"
+    }
+
+
 def test_read_text_file_utf8(tmp_path):
     path = tmp_path / "sample.txt"
     path.write_text("안녕하세요 keyword", encoding="utf-8")
