@@ -121,6 +121,56 @@ def open_path(path):
         subprocess.Popen(["xdg-open", path])
 
 
+class Tooltip:
+    """마우스를 올리면 위젯 아래에 설명 박스를 띄우고, 벗어나면 없앤다.
+
+    창 테두리/제목표시줄이 없는 Toplevel(overrideredirect)로 그려서
+    일반 윈도우 창이 아니라 말풍선 같은 플로팅 박스처럼 보이게 한다.
+    """
+
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tip_window = None
+        widget.bind("<Enter>", self._show)
+        widget.bind("<Leave>", self._hide)
+        widget.bind("<Destroy>", self._hide)
+
+    def _show(self, event=None):
+        if self.tip_window is not None or not self.text:
+            return
+
+        x = self.widget.winfo_rootx()
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        try:
+            tw.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+
+        label = tk.Label(
+            tw,
+            text=self.text,
+            justify="left",
+            background="#111827",
+            foreground="#f9fafb",
+            relief="solid",
+            borderwidth=1,
+            font=("Helvetica", 9),
+            padx=10,
+            pady=8,
+        )
+        label.pack()
+
+    def _hide(self, event=None):
+        if self.tip_window is not None:
+            self.tip_window.destroy()
+            self.tip_window = None
+
+
 class ContentSearchApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -271,7 +321,18 @@ class ContentSearchApp(tk.Tk):
 
         ttk.Checkbutton(option_frame, text="하위 폴더 포함", variable=self.subfolder_var).pack(side="left", padx=(0, 14))
         ttk.Checkbutton(option_frame, text="대소문자 구분", variable=self.case_sensitive_var).pack(side="left", padx=(0, 14))
-        ttk.Checkbutton(option_frame, text="와일드카드 사용 (*, ?)", variable=self.wildcard_var).pack(side="left", padx=(0, 14))
+        wildcard_check = ttk.Checkbutton(
+            option_frame, text="와일드카드 사용 (*, ?)", variable=self.wildcard_var
+        )
+        wildcard_check.pack(side="left", padx=(0, 14))
+        Tooltip(
+            wildcard_check,
+            "* : 임의 길이의 문자열과 일치\n"
+            "? : 문자 1개와 일치\n\n"
+            "예시\n"
+            "  invoice*2024  →  \"invoice 12월 2024\"에 일치\n"
+            "  202?년  →  \"2024년\"에는 일치, \"20244년\"에는 불일치",
+        )
         ttk.Checkbutton(option_frame, text="파일명 검색", variable=self.filename_var).pack(side="left", padx=(0, 14))
         ttk.Checkbutton(option_frame, text="파일 내부 검색", variable=self.contents_var).pack(side="left")
 
