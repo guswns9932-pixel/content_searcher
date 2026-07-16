@@ -27,23 +27,15 @@ def make_snippet(text, start, end, radius=70):
     return prefix + flat[left:right] + suffix
 
 
-def find_matches(text, pattern, exclude_pattern=None):
+def find_matches(text, pattern):
     """
     text 안에서 패턴을 찾아 (시작, 끝, 일치한 키워드, 스니펫) 목록을 반환한다.
     pattern은 re.Pattern 또는 SearchPattern이다. 일치한 키워드를 알 수 없으면
     (예: build_pattern을 거치지 않은 단순 re.Pattern) None이 된다.
-
-    exclude_pattern이 주어지고 이 text 안에 그 패턴이 하나라도 있으면, 검색
-    키워드가 일치하더라도 이 text 전체를 결과에서 제외한다(빈 리스트 반환).
-    "본문/셀/문단" 등 하나의 단위 텍스트 안에 제외 키워드가 섞여 있으면
-    그 단위는 통째로 결과에서 빼는 방식이다.
     """
     if text is None:
         return []
     text = str(text)
-
-    if exclude_pattern is not None and exclude_pattern.search(text):
-        return []
 
     results = []
     for match in pattern.finditer(text):

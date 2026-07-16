@@ -153,6 +153,31 @@ def test_search_hwpx_attributes_correct_keyword_among_several(tmp_path):
     assert matched_keywords == {"invoice", "receipt"}
 
 
+def test_file_contains_excluded_text_checks_across_different_units(tmp_path):
+    # 검색어("keyword")는 xlsx의 A1 셀에, 제외어("draft")는 다른 셀인 B1에 있다.
+    # 예전 방식(같은 단위 안에서만 제외 검사)이면 놓쳤을 케이스를 검증한다.
+    openpyxl = pytest.importorskip("openpyxl")
+    path = tmp_path / "sample.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["A1"] = "hello keyword"
+    ws["B1"] = "draft version"
+    wb.save(path)
+
+    exclude_pattern = build_pattern("draft", use_wildcard=False, case_sensitive=False)
+    assert parsers.file_contains_excluded_text(path, exclude_pattern) is True
+
+    missing_pattern = build_pattern("nonexistent", use_wildcard=False, case_sensitive=False)
+    assert parsers.file_contains_excluded_text(path, missing_pattern) is False
+
+
+def test_file_contains_excluded_text_unsupported_extension_is_false(tmp_path):
+    path = tmp_path / "sample.unknownext"
+    path.write_text("draft", encoding="utf-8")
+    exclude_pattern = build_pattern("draft", use_wildcard=False, case_sensitive=False)
+    assert parsers.file_contains_excluded_text(path, exclude_pattern) is False
+
+
 @pytest.mark.parametrize("ext,expected_dispatch", [
     (".txt", "search_text_file"),
     (".pdf", "search_pdf"),
@@ -167,7 +192,7 @@ def test_search_file_contents_dispatches_by_extension(monkeypatch, ext, expected
     calls = []
 
     def make_stub(name):
-        def stub(path, pattern, exclude_pattern=None):
+        def stub(path, pattern):
             calls.append(name)
             return []
         return stub

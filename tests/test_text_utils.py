@@ -45,20 +45,6 @@ def test_find_matches_caps_at_max_hits_per_file():
     assert len(results) == MAX_HITS_PER_FILE
 
 
-def test_find_matches_excludes_unit_when_exclude_pattern_matches():
-    pattern = build_pattern("invoice", use_wildcard=False, case_sensitive=True)
-    exclude_pattern = build_pattern("draft", use_wildcard=False, case_sensitive=True)
-
-    assert find_matches("this is a draft invoice", pattern, exclude_pattern) == []
-    assert find_matches("this is a final invoice", pattern, exclude_pattern) != []
-
-
-def test_find_matches_exclude_pattern_none_means_no_filtering():
-    pattern = build_pattern("invoice", use_wildcard=False, case_sensitive=True)
-    results = find_matches("this is a draft invoice", pattern, exclude_pattern=None)
-    assert len(results) == 1
-
-
 def test_find_matches_keyword_is_none_for_plain_regex():
     # build_pattern()을 거치지 않은 일반 re.Pattern에는 keywords 정보가 없다.
     pattern = re.compile("cat")

@@ -1,6 +1,8 @@
 import re
 import threading
 
+import pytest
+
 from content_search.scanner import iter_paths, scan
 from content_search.text_utils import build_pattern
 
@@ -122,6 +124,67 @@ def test_scan_exclude_pattern_drops_units_containing_it(tmp_path):
 
     assert file_count == 1
     assert results == ["b.txt"]
+
+
+def test_scan_exclude_pattern_excludes_whole_file_across_units(tmp_path):
+    # 검색어("keyword")는 A1 셀에, 제외어("draft")는 다른 셀 B1에 있다.
+    # 예전 방식(같은 단위 안에서만 제외 검사)이면 이 파일이 결과에 남았을 것이다.
+    openpyxl = pytest.importorskip("openpyxl")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["A1"] = "hello keyword"
+    ws["B1"] = "draft version"
+    wb.save(tmp_path / "mixed.xlsx")
+
+    pattern = build_pattern("keyword", use_wildcard=False, case_sensitive=False)
+    exclude_pattern = build_pattern("draft", use_wildcard=False, case_sensitive=False)
+    results = []
+
+    processed, total_hits, file_count = scan(
+        folder=tmp_path,
+        pattern=pattern,
+        exclude_pattern=exclude_pattern,
+        include_subfolders=True,
+        search_filename=False,
+        search_contents=True,
+        extensions=set(),
+        is_cancelled=never_cancelled,
+        on_file_start=lambda index, path: None,
+        on_file_result=lambda path, location, keyword, snippet: results.append(path.name),
+        on_error=lambda message: None,
+        max_workers=4,
+    )
+
+    assert file_count == 0
+    assert results == []
+
+
+def test_scan_exclude_pattern_checks_filename_even_though_match_is_in_content(tmp_path):
+    # 파일명 자체에 제외어("소개")가 있고, 검색어("keyword")는 파일 내용에 있다.
+    (tmp_path / "회사소개.txt").write_text("hello keyword world", encoding="utf-8")
+    (tmp_path / "plain.txt").write_text("hello keyword again", encoding="utf-8")
+
+    pattern = build_pattern("keyword", use_wildcard=False, case_sensitive=False)
+    exclude_pattern = build_pattern("소개", use_wildcard=False, case_sensitive=False)
+    results = []
+
+    processed, total_hits, file_count = scan(
+        folder=tmp_path,
+        pattern=pattern,
+        exclude_pattern=exclude_pattern,
+        include_subfolders=True,
+        search_filename=True,
+        search_contents=True,
+        extensions=set(),
+        is_cancelled=never_cancelled,
+        on_file_start=lambda index, path: None,
+        on_file_result=lambda path, location, keyword, snippet: results.append(path.name),
+        on_error=lambda message: None,
+        max_workers=4,
+    )
+
+    assert file_count == 1
+    assert results == ["plain.txt"]
 
 
 def test_scan_respects_extension_filter(tmp_path):

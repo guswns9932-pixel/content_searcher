@@ -10,7 +10,7 @@ import queue
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .parsers import SUPPORTED_EXTENSIONS, search_file_contents
+from .parsers import SUPPORTED_EXTENSIONS, file_contains_excluded_text, search_file_contents
 from .text_utils import find_matches
 
 DEFAULT_MAX_WORKERS = 8
@@ -48,15 +48,30 @@ def iter_paths(folder, include_subfolders, extensions, is_cancelled):
 
 
 def search_one_file(path, pattern, search_filename, search_contents, exclude_pattern=None):
-    """파일 하나를 검사해 (위치, 일치한 키워드, 스니펫) 목록을 반환한다."""
+    """
+    파일 하나를 검사해 (위치, 일치한 키워드, 스니펫) 목록을 반환한다.
+
+    exclude_pattern이 주어지면, 검색 범위(파일명/내용) 안에 그 패턴이 하나라도
+    있는 파일은 검색 키워드와 무관하게 통째로 제외한다(빈 리스트 반환).
+    """
+    if exclude_pattern is not None:
+        if search_filename and exclude_pattern.search(path.name):
+            return []
+        if (
+            search_contents
+            and path.suffix.lower() in SUPPORTED_EXTENSIONS
+            and file_contains_excluded_text(path, exclude_pattern)
+        ):
+            return []
+
     rows = []
 
     if search_filename:
-        for _, _, keyword, snippet in find_matches(path.name, pattern, exclude_pattern):
+        for _, _, keyword, snippet in find_matches(path.name, pattern):
             rows.append(("파일명", keyword, snippet))
 
     if search_contents and path.suffix.lower() in SUPPORTED_EXTENSIONS:
-        rows.extend(search_file_contents(path, pattern, exclude_pattern))
+        rows.extend(search_file_contents(path, pattern))
 
     return rows
 
@@ -80,8 +95,8 @@ def scan(
 
     on_file_start(processed_count, path), on_file_result(path, location, keyword, snippet),
     on_error(message) 콜백은 스캔이 실행되는 스레드에서 호출된다.
-    exclude_pattern이 주어지면, 검색 키워드가 일치한 단위 텍스트(파일명/본문/셀/문단 등)
-    안에 그 패턴도 있으면 해당 단위는 결과에서 제외한다.
+    exclude_pattern이 주어지면, 검색 범위(파일명/내용) 안 어딘가에 그 패턴이
+    하나라도 있는 파일은 통째로 결과에서 제외한다.
     반환값: (processed_count, total_hits, matched_file_count)
     """
     processed = 0
