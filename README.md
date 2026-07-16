@@ -78,3 +78,19 @@ pytest
 선택적 라이브러리(PyMuPDF, openpyxl, python-docx, python-pptx, xlrd/xlwt)가 설치되어 있지 않으면
 해당 형식 테스트는 자동으로 건너뜁니다(skip). GUI 자체의 시각적 동작은 자동 테스트 대상이 아니며,
 Xvfb 등 가상 디스플레이 환경에서 수동으로 확인했습니다.
+
+## 실행 파일(exe)로 빌드하기
+
+`build.py`가 [PyInstaller](https://pyinstaller.org/)로 단일 실행 파일을 만든다.
+
+```bash
+pip install pyinstaller   # 없으면 build.py가 자동으로 설치를 시도한다
+python build.py
+```
+
+결과물은 `dist/quote_Auto.exe` (Windows) 또는 `dist/quote_Auto` (Mac/Linux)로 생성된다.
+실행 파일명이 곧 작업관리자에 표시되는 프로세스명이므로, 이름을 바꾸고 싶으면
+`build.py`의 `APP_NAME` 값만 바꾸면 된다.
+
+PyInstaller는 크로스 컴파일을 지원하지 않는다 — 실제 `.exe`가 필요하면 Windows
+환경에서 이 스크립트를 실행해야 한다(Linux/Mac에서 실행하면 그 OS용 실행 파일이 만들어진다).
