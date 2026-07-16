@@ -59,9 +59,31 @@ def _wildcard_to_regex(keyword):
     return "".join(parts)
 
 
-def build_pattern(keyword, use_wildcard, case_sensitive):
+def parse_keywords(text):
+    """
+    쉼표/세미콜론/줄바꿈으로 구분된 여러 키워드를 리스트로 반환한다.
+    공백은 구분자로 쓰지 않는다 ("2024 보고서"처럼 키워드 자체에 공백이 들어갈 수 있어서다).
+    """
+    if not text:
+        return []
+    tokens = re.split(r"[,;\n]+", text)
+    return [token.strip() for token in tokens if token.strip()]
+
+
+def build_pattern(keywords, use_wildcard, case_sensitive):
+    """
+    keywords는 문자열 하나 또는 여러 키워드의 리스트일 수 있다.
+    여러 개면 그중 하나라도 일치하면 매치되는(OR) 패턴 하나로 합쳐 컴파일한다.
+    """
+    if isinstance(keywords, str):
+        keywords = [keywords]
+
     flags = 0 if case_sensitive else re.IGNORECASE
-    expression = _wildcard_to_regex(keyword) if use_wildcard else re.escape(keyword)
+    fragments = [
+        _wildcard_to_regex(keyword) if use_wildcard else re.escape(keyword)
+        for keyword in keywords
+    ]
+    expression = "|".join(f"(?:{fragment})" for fragment in fragments)
     return re.compile(expression, flags)
 
 

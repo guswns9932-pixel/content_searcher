@@ -7,6 +7,7 @@ from content_search.text_utils import (
     make_snippet,
     normalize_text,
     parse_extension_filter,
+    parse_keywords,
 )
 
 
@@ -84,6 +85,36 @@ def test_build_pattern_wildcard_never_raises_on_arbitrary_input():
     # 순수 문자 치환이라 정규식 특수문자가 섞여도 컴파일 오류가 나지 않는다.
     pattern = build_pattern("(weird [input", use_wildcard=True, case_sensitive=True)
     assert pattern.search("(weird [input")
+
+
+def test_build_pattern_multiple_keywords_matches_any_of_them():
+    pattern = build_pattern(["invoice", "receipt"], use_wildcard=False, case_sensitive=True)
+    assert pattern.search("paid the invoice today")
+    assert pattern.search("here is your receipt")
+    assert not pattern.search("nothing relevant here")
+
+
+def test_build_pattern_multiple_keywords_supports_wildcard_per_keyword():
+    pattern = build_pattern(["invoice*2024", "b?d"], use_wildcard=True, case_sensitive=True)
+    assert pattern.search("this invoice number 2024 is paid")
+    assert pattern.search("the bad dog")
+    assert not pattern.search("nothing relevant here")
+
+
+def test_parse_keywords_empty_returns_empty_list():
+    assert parse_keywords("") == []
+    assert parse_keywords("   ") == []
+    assert parse_keywords(", ,;\n") == []
+
+
+def test_parse_keywords_splits_on_comma_semicolon_and_newline():
+    assert parse_keywords("invoice, receipt;세금계산서\n영수증") == [
+        "invoice", "receipt", "세금계산서", "영수증"
+    ]
+
+
+def test_parse_keywords_preserves_spaces_within_a_keyword():
+    assert parse_keywords("2024 report, final draft") == ["2024 report", "final draft"]
 
 
 def test_parse_extension_filter_empty_means_no_filter():

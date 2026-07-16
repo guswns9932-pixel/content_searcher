@@ -14,7 +14,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from .scanner import scan
-from .text_utils import build_pattern, parse_extension_filter
+from .text_utils import build_pattern, parse_extension_filter, parse_keywords
 
 APP_TITLE = "폴더 내부 키워드 검색기"
 APP_VERSION = "2.0"
@@ -307,6 +307,9 @@ class ContentSearchApp(tk.Tk):
         keyword_entry = ttk.Entry(search_frame, textvariable=self.keyword_var)
         keyword_entry.grid(row=1, column=1, sticky="ew", pady=6)
         keyword_entry.bind("<Return>", lambda event: self.start_search())
+        ttk.Label(search_frame, text="쉼표(,)로 구분해 여러 개 입력 가능", style="Muted.TLabel").grid(
+            row=1, column=2, sticky="w", padx=(8, 0), pady=6
+        )
 
         ttk.Label(search_frame, text="확장자 필터").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=6)
         extension_entry = ttk.Entry(search_frame, textvariable=self.extension_var)
@@ -427,7 +430,7 @@ class ContentSearchApp(tk.Tk):
 
     def start_search(self):
         folder = self.folder_var.get().strip()
-        keyword = self.keyword_var.get()
+        keywords = parse_keywords(self.keyword_var.get())
 
         if not folder:
             messagebox.showwarning("입력 확인", "검색할 폴더를 선택하세요.")
@@ -437,7 +440,7 @@ class ContentSearchApp(tk.Tk):
             messagebox.showerror("폴더 오류", "선택한 폴더가 존재하지 않습니다.")
             return
 
-        if not keyword:
+        if not keywords:
             messagebox.showwarning("입력 확인", "검색 키워드를 입력하세요.")
             return
 
@@ -447,7 +450,7 @@ class ContentSearchApp(tk.Tk):
 
         try:
             pattern = build_pattern(
-                keyword,
+                keywords,
                 self.wildcard_var.get(),
                 self.case_sensitive_var.get()
             )
