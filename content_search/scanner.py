@@ -48,12 +48,12 @@ def iter_paths(folder, include_subfolders, extensions, is_cancelled):
 
 
 def search_one_file(path, pattern, search_filename, search_contents):
-    """파일 하나를 검사해 (위치, 스니펫) 목록을 반환한다."""
+    """파일 하나를 검사해 (위치, 일치한 키워드, 스니펫) 목록을 반환한다."""
     rows = []
 
     if search_filename:
-        for _, _, snippet in find_matches(path.name, pattern):
-            rows.append(("파일명", snippet))
+        for _, _, keyword, snippet in find_matches(path.name, pattern):
+            rows.append(("파일명", keyword, snippet))
 
     if search_contents and path.suffix.lower() in SUPPORTED_EXTENSIONS:
         rows.extend(search_file_contents(path, pattern))
@@ -77,7 +77,7 @@ def scan(
     """
     폴더를 병렬로 검색한다.
 
-    on_file_start(processed_count, path), on_file_result(path, location, snippet),
+    on_file_start(processed_count, path), on_file_result(path, location, keyword, snippet),
     on_error(message) 콜백은 스캔이 실행되는 스레드에서 호출된다.
     반환값: (processed_count, total_hits, matched_file_count)
     """
@@ -124,10 +124,10 @@ def scan(
                 on_error(f"{path} | {exc}")
                 rows = []
 
-            for location, snippet in rows:
+            for location, keyword, snippet in rows:
                 total_hits += 1
                 matched_files.add(path)
-                on_file_result(path, location, snippet)
+                on_file_result(path, location, keyword, snippet)
 
             submit_next()
     finally:

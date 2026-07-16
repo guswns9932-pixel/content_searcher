@@ -2,6 +2,7 @@ import re
 import threading
 
 from content_search.scanner import iter_paths, scan
+from content_search.text_utils import build_pattern
 
 
 def never_cancelled():
@@ -55,7 +56,7 @@ def test_scan_finds_filename_and_content_matches(tmp_path):
         extensions=set(),
         is_cancelled=never_cancelled,
         on_file_start=lambda index, path: None,
-        on_file_result=lambda path, location, snippet: results.append((path.name, location, snippet)),
+        on_file_result=lambda path, location, keyword, snippet: results.append((path.name, location, snippet)),
         on_error=errors.append,
         max_workers=4,
     )
@@ -68,6 +69,32 @@ def test_scan_finds_filename_and_content_matches(tmp_path):
     locations = {(name, location) for name, location, _ in results}
     assert ("a.txt", "본문") in locations
     assert ("keyword_file.txt", "파일명") in locations
+
+
+def test_scan_attributes_matched_keyword_via_build_pattern(tmp_path):
+    (tmp_path / "a.txt").write_text("this invoice is paid", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("here is your receipt", encoding="utf-8")
+    (tmp_path / "c.txt").write_text("nothing relevant here", encoding="utf-8")
+
+    pattern = build_pattern(["invoice", "receipt"], use_wildcard=False, case_sensitive=True)
+    results = []
+
+    processed, total_hits, file_count = scan(
+        folder=tmp_path,
+        pattern=pattern,
+        include_subfolders=True,
+        search_filename=False,
+        search_contents=True,
+        extensions=set(),
+        is_cancelled=never_cancelled,
+        on_file_start=lambda index, path: None,
+        on_file_result=lambda path, location, keyword, snippet: results.append((path.name, keyword)),
+        on_error=lambda message: None,
+        max_workers=4,
+    )
+
+    assert file_count == 2
+    assert set(results) == {("a.txt", "invoice"), ("b.txt", "receipt")}
 
 
 def test_scan_respects_extension_filter(tmp_path):
@@ -86,7 +113,7 @@ def test_scan_respects_extension_filter(tmp_path):
         extensions={".txt"},
         is_cancelled=never_cancelled,
         on_file_start=lambda index, path: None,
-        on_file_result=lambda path, location, snippet: results.append(path.name),
+        on_file_result=lambda path, location, keyword, snippet: results.append(path.name),
         on_error=lambda message: None,
     )
 
@@ -110,7 +137,7 @@ def test_scan_reports_errors_without_raising(tmp_path):
         extensions=set(),
         is_cancelled=never_cancelled,
         on_file_start=lambda index, path: None,
-        on_file_result=lambda path, location, snippet: None,
+        on_file_result=lambda path, location, keyword, snippet: None,
         on_error=errors.append,
     )
 
@@ -141,7 +168,7 @@ def test_scan_stops_early_when_cancelled_mid_scan(tmp_path):
         extensions=set(),
         is_cancelled=cancel_event.is_set,
         on_file_start=on_file_start,
-        on_file_result=lambda path, location, snippet: None,
+        on_file_result=lambda path, location, keyword, snippet: None,
         on_error=lambda message: None,
         max_workers=4,
     )

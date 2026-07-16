@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from content_search import parsers
+from content_search.text_utils import build_pattern
 
 
 def test_read_text_file_utf8(tmp_path):
@@ -22,9 +23,9 @@ def test_read_text_file_cp949(tmp_path):
 def test_search_text_file_finds_snippet(tmp_path):
     path = tmp_path / "a.txt"
     path.write_text("hello keyword world", encoding="utf-8")
-    pattern = re.compile("keyword")
+    pattern = build_pattern("keyword", use_wildcard=False, case_sensitive=False)
     rows = parsers.search_text_file(path, pattern)
-    assert rows == [("본문", "hello keyword world")]
+    assert rows == [("본문", "keyword", "hello keyword world")]
 
 
 def test_search_pdf(tmp_path):
@@ -36,11 +37,12 @@ def test_search_pdf(tmp_path):
     doc.save(path)
     doc.close()
 
-    pattern = re.compile("keyword")
+    pattern = build_pattern("keyword", use_wildcard=False, case_sensitive=False)
     rows = parsers.search_pdf(path, pattern)
     assert len(rows) == 1
     assert rows[0][0] == "1페이지"
-    assert "keyword" in rows[0][1]
+    assert rows[0][1] == "keyword"
+    assert "keyword" in rows[0][2]
 
 
 def test_search_xlsx(tmp_path):
@@ -52,9 +54,9 @@ def test_search_xlsx(tmp_path):
     ws["A1"] = "hello keyword"
     wb.save(path)
 
-    pattern = re.compile("keyword")
+    pattern = build_pattern("keyword", use_wildcard=False, case_sensitive=False)
     rows = parsers.search_xlsx(path, pattern)
-    assert rows == [("Sheet1!A1", "hello keyword")]
+    assert rows == [("Sheet1!A1", "keyword", "hello keyword")]
 
 
 def test_search_xls(tmp_path):
@@ -66,11 +68,12 @@ def test_search_xls(tmp_path):
     ws.write(0, 0, "hello keyword")
     wb.save(str(path))
 
-    pattern = re.compile("keyword")
+    pattern = build_pattern("keyword", use_wildcard=False, case_sensitive=False)
     rows = parsers.search_xls(path, pattern)
     assert len(rows) == 1
     assert rows[0][0] == "Sheet1!A1"
-    assert "keyword" in rows[0][1]
+    assert rows[0][1] == "keyword"
+    assert "keyword" in rows[0][2]
 
 
 def test_search_docx(tmp_path):
@@ -82,11 +85,12 @@ def test_search_docx(tmp_path):
     table.rows[0].cells[0].text = "table keyword cell"
     document.save(path)
 
-    pattern = re.compile("keyword")
+    pattern = build_pattern("keyword", use_wildcard=False, case_sensitive=False)
     rows = parsers.search_docx(path, pattern)
-    locations = [loc for loc, _ in rows]
+    locations = [loc for loc, _, _ in rows]
     assert "문단 1" in locations
     assert any(loc.startswith("표 1") for loc in locations)
+    assert all(keyword == "keyword" for _, keyword, _ in rows)
 
 
 def test_search_pptx(tmp_path):
@@ -98,10 +102,11 @@ def test_search_pptx(tmp_path):
     textbox.text_frame.text = "hello keyword world"
     presentation.save(path)
 
-    pattern = re.compile("keyword")
+    pattern = build_pattern("keyword", use_wildcard=False, case_sensitive=False)
     rows = parsers.search_pptx(path, pattern)
     assert len(rows) == 1
     assert rows[0][0] == "1슬라이드"
+    assert rows[0][1] == "keyword"
 
 
 def test_extract_shape_text_handles_group_shapes():
@@ -127,10 +132,25 @@ def test_search_hwpx(tmp_path):
             "<root><p>hello keyword world</p></root>"
         )
 
-    pattern = re.compile("keyword")
+    pattern = build_pattern("keyword", use_wildcard=False, case_sensitive=False)
     rows = parsers.search_hwpx(path, pattern)
     assert len(rows) == 1
     assert rows[0][0] == "HWPX/section0.xml"
+    assert rows[0][1] == "keyword"
+
+
+def test_search_hwpx_attributes_correct_keyword_among_several(tmp_path):
+    path = tmp_path / "sample.hwpx"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            "Contents/section0.xml",
+            "<root><p>invoice paid, receipt attached</p></root>"
+        )
+
+    pattern = build_pattern(["invoice", "receipt"], use_wildcard=False, case_sensitive=False)
+    rows = parsers.search_hwpx(path, pattern)
+    matched_keywords = {keyword for _, keyword, _ in rows}
+    assert matched_keywords == {"invoice", "receipt"}
 
 
 @pytest.mark.parametrize("ext,expected_dispatch", [

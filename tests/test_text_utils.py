@@ -45,6 +45,27 @@ def test_find_matches_caps_at_max_hits_per_file():
     assert len(results) == MAX_HITS_PER_FILE
 
 
+def test_find_matches_keyword_is_none_for_plain_regex():
+    # build_pattern()을 거치지 않은 일반 re.Pattern에는 keywords 정보가 없다.
+    pattern = re.compile("cat")
+    results = find_matches("a cat sat", pattern)
+    assert results[0][2] is None
+
+
+def test_find_matches_attributes_correct_keyword_from_build_pattern():
+    pattern = build_pattern(["invoice", "receipt"], use_wildcard=False, case_sensitive=True)
+    results = find_matches("paid the invoice, got a receipt", pattern)
+    matched_keywords = [keyword for _, _, keyword, _ in results]
+    assert matched_keywords == ["invoice", "receipt"]
+
+
+def test_find_matches_attributes_keyword_for_wildcard_match():
+    pattern = build_pattern(["invoice*2024"], use_wildcard=True, case_sensitive=True)
+    results = find_matches("the invoice number 2024 was paid", pattern)
+    assert len(results) == 1
+    assert results[0][2] == "invoice*2024"
+
+
 def test_build_pattern_literal_is_case_insensitive_by_default():
     pattern = build_pattern("Cat", use_wildcard=False, case_sensitive=False)
     assert pattern.search("a cat sat")

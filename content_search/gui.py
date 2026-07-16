@@ -361,15 +361,17 @@ class ContentSearchApp(tk.Tk):
         result_frame = ttk.LabelFrame(outer, text="검색 결과", padding=8)
         result_frame.pack(fill="both", expand=True)
 
-        columns = ("name", "type", "location", "snippet", "path")
+        columns = ("keyword", "name", "type", "location", "snippet", "path")
         self.tree = ttk.Treeview(result_frame, columns=columns, show="headings", selectmode="browse")
 
+        self.tree.heading("keyword", text="키워드")
         self.tree.heading("name", text="파일명")
         self.tree.heading("type", text="형식")
         self.tree.heading("location", text="일치 위치")
         self.tree.heading("snippet", text="일치 내용")
         self.tree.heading("path", text="전체 경로")
 
+        self.tree.column("keyword", width=110, minwidth=80)
         self.tree.column("name", width=220, minwidth=140)
         self.tree.column("type", width=70, minwidth=60, anchor="center")
         self.tree.column("location", width=150, minwidth=100)
@@ -494,12 +496,13 @@ class ContentSearchApp(tk.Tk):
         def on_file_start(processed, path):
             self.task_queue.put(("progress", processed, str(path)))
 
-        def on_file_result(path, location, snippet):
+        def on_file_result(path, location, keyword, snippet):
             self.task_queue.put((
                 "result",
                 path.name,
                 path.suffix.lower() or "(없음)",
                 location,
+                keyword,
                 snippet,
                 str(path),
             ))
@@ -540,13 +543,13 @@ class ContentSearchApp(tk.Tk):
                     self._set_status(f"{index:,}개 확인 중: {Path(path).name}", "running")
 
                 elif kind == "result":
-                    _, name, ext, location, snippet, path = event
+                    _, name, ext, location, keyword, snippet, path = event
                     self._row_parity += 1
                     tag = "odd" if self._row_parity % 2 else "even"
                     iid = self.tree.insert(
                         "",
                         "end",
-                        values=(name, ext, location, snippet, path),
+                        values=(keyword or "", name, ext, location, snippet, path),
                         tags=(tag,),
                     )
                     self.result_paths[iid] = path
@@ -655,7 +658,7 @@ class ContentSearchApp(tk.Tk):
         try:
             with open(save_path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
-                writer.writerow(["파일명", "형식", "일치 위치", "일치 내용", "전체 경로"])
+                writer.writerow(["키워드", "파일명", "형식", "일치 위치", "일치 내용", "전체 경로"])
                 for item in items:
                     writer.writerow(self.tree.item(item, "values"))
 

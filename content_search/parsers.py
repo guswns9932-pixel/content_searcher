@@ -71,8 +71,8 @@ def read_text_file(path):
 def search_text_file(path, pattern):
     text = read_text_file(path)
     rows = []
-    for _, _, snippet in find_matches(text, pattern):
-        rows.append(("본문", snippet))
+    for _, _, keyword, snippet in find_matches(text, pattern):
+        rows.append(("본문", keyword, snippet))
     return rows
 
 
@@ -84,8 +84,8 @@ def search_pdf(path, pattern):
     with fitz.open(path) as doc:
         for page_index, page in enumerate(doc):
             text = page.get_text("text")
-            for _, _, snippet in find_matches(text, pattern):
-                rows.append((f"{page_index + 1}페이지", snippet))
+            for _, _, keyword, snippet in find_matches(text, pattern):
+                rows.append((f"{page_index + 1}페이지", keyword, snippet))
                 if len(rows) >= MAX_HITS_PER_FILE:
                     return rows
     return rows
@@ -111,8 +111,8 @@ def search_xlsx(path, pattern):
                         continue
                     text = str(value)
                     matches = find_matches(text, pattern)
-                    for _, _, snippet in matches:
-                        rows.append((f"{worksheet.title}!{cell.coordinate}", snippet))
+                    for _, _, keyword, snippet in matches:
+                        rows.append((f"{worksheet.title}!{cell.coordinate}", keyword, snippet))
                         if len(rows) >= MAX_HITS_PER_FILE:
                             return rows
     finally:
@@ -135,9 +135,9 @@ def search_xls(path, pattern):
                     if value in (None, ""):
                         continue
                     text = str(value)
-                    for _, _, snippet in find_matches(text, pattern):
+                    for _, _, keyword, snippet in find_matches(text, pattern):
                         cell_name = f"{xlrd.formula.colname(col_index)}{row_index + 1}"
-                        rows.append((f"{sheet.name}!{cell_name}", snippet))
+                        rows.append((f"{sheet.name}!{cell_name}", keyword, snippet))
                         if len(rows) >= MAX_HITS_PER_FILE:
                             return rows
     finally:
@@ -155,8 +155,8 @@ def search_docx(path, pattern):
 
     for index, paragraph in enumerate(doc.paragraphs, start=1):
         text = paragraph.text
-        for _, _, snippet in find_matches(text, pattern):
-            rows.append((f"문단 {index}", snippet))
+        for _, _, keyword, snippet in find_matches(text, pattern):
+            rows.append((f"문단 {index}", keyword, snippet))
             if len(rows) >= MAX_HITS_PER_FILE:
                 return rows
 
@@ -164,8 +164,8 @@ def search_docx(path, pattern):
         for row_index, row in enumerate(table.rows, start=1):
             for col_index, cell in enumerate(row.cells, start=1):
                 text = cell.text
-                for _, _, snippet in find_matches(text, pattern):
-                    rows.append((f"표 {table_index} / {row_index}행 {col_index}열", snippet))
+                for _, _, keyword, snippet in find_matches(text, pattern):
+                    rows.append((f"표 {table_index} / {row_index}행 {col_index}열", keyword, snippet))
                     if len(rows) >= MAX_HITS_PER_FILE:
                         return rows
 
@@ -202,8 +202,8 @@ def search_pptx(path, pattern):
     for slide_index, slide in enumerate(presentation.slides, start=1):
         for shape in slide.shapes:
             for text in extract_shape_text(shape):
-                for _, _, snippet in find_matches(text, pattern):
-                    rows.append((f"{slide_index}슬라이드", snippet))
+                for _, _, keyword, snippet in find_matches(text, pattern):
+                    rows.append((f"{slide_index}슬라이드", keyword, snippet))
                     if len(rows) >= MAX_HITS_PER_FILE:
                         return rows
 
@@ -235,9 +235,9 @@ def search_hwpx(path, pattern):
             except ET.ParseError:
                 text = raw.decode("utf-8", errors="ignore")
 
-            for _, _, snippet in find_matches(text, pattern):
+            for _, _, keyword, snippet in find_matches(text, pattern):
                 location = Path(name).name
-                rows.append((f"HWPX/{location}", snippet))
+                rows.append((f"HWPX/{location}", keyword, snippet))
                 if len(rows) >= MAX_HITS_PER_FILE:
                     return rows
 
