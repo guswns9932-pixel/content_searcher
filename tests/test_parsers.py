@@ -167,7 +167,7 @@ def test_search_file_contents_dispatches_by_extension(monkeypatch, ext, expected
     calls = []
 
     def make_stub(name):
-        def stub(path, pattern):
+        def stub(path, pattern, exclude_pattern=None):
             calls.append(name)
             return []
         return stub

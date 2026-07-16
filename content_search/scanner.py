@@ -47,16 +47,16 @@ def iter_paths(folder, include_subfolders, extensions, is_cancelled):
                 yield path
 
 
-def search_one_file(path, pattern, search_filename, search_contents):
+def search_one_file(path, pattern, search_filename, search_contents, exclude_pattern=None):
     """파일 하나를 검사해 (위치, 일치한 키워드, 스니펫) 목록을 반환한다."""
     rows = []
 
     if search_filename:
-        for _, _, keyword, snippet in find_matches(path.name, pattern):
+        for _, _, keyword, snippet in find_matches(path.name, pattern, exclude_pattern):
             rows.append(("파일명", keyword, snippet))
 
     if search_contents and path.suffix.lower() in SUPPORTED_EXTENSIONS:
-        rows.extend(search_file_contents(path, pattern))
+        rows.extend(search_file_contents(path, pattern, exclude_pattern))
 
     return rows
 
@@ -72,6 +72,7 @@ def scan(
     on_file_start,
     on_file_result,
     on_error,
+    exclude_pattern=None,
     max_workers=DEFAULT_MAX_WORKERS,
 ):
     """
@@ -79,6 +80,8 @@ def scan(
 
     on_file_start(processed_count, path), on_file_result(path, location, keyword, snippet),
     on_error(message) 콜백은 스캔이 실행되는 스레드에서 호출된다.
+    exclude_pattern이 주어지면, 검색 키워드가 일치한 단위 텍스트(파일명/본문/셀/문단 등)
+    안에 그 패턴도 있으면 해당 단위는 결과에서 제외한다.
     반환값: (processed_count, total_hits, matched_file_count)
     """
     processed = 0
@@ -93,7 +96,9 @@ def scan(
     def submit_next():
         nonlocal pending
         for path in paths_iter:
-            future = executor.submit(search_one_file, path, pattern, search_filename, search_contents)
+            future = executor.submit(
+                search_one_file, path, pattern, search_filename, search_contents, exclude_pattern
+            )
             future.path = path
             future.add_done_callback(completed.put)
             pending += 1

@@ -68,15 +68,15 @@ def read_text_file(path):
         raise
 
 
-def search_text_file(path, pattern):
+def search_text_file(path, pattern, exclude_pattern=None):
     text = read_text_file(path)
     rows = []
-    for _, _, keyword, snippet in find_matches(text, pattern):
+    for _, _, keyword, snippet in find_matches(text, pattern, exclude_pattern):
         rows.append(("본문", keyword, snippet))
     return rows
 
 
-def search_pdf(path, pattern):
+def search_pdf(path, pattern, exclude_pattern=None):
     if fitz is None:
         raise RuntimeError("PyMuPDF가 설치되지 않았습니다.")
 
@@ -84,14 +84,14 @@ def search_pdf(path, pattern):
     with fitz.open(path) as doc:
         for page_index, page in enumerate(doc):
             text = page.get_text("text")
-            for _, _, keyword, snippet in find_matches(text, pattern):
+            for _, _, keyword, snippet in find_matches(text, pattern, exclude_pattern):
                 rows.append((f"{page_index + 1}페이지", keyword, snippet))
                 if len(rows) >= MAX_HITS_PER_FILE:
                     return rows
     return rows
 
 
-def search_xlsx(path, pattern):
+def search_xlsx(path, pattern, exclude_pattern=None):
     if openpyxl is None:
         raise RuntimeError("openpyxl이 설치되지 않았습니다.")
 
@@ -110,7 +110,7 @@ def search_xlsx(path, pattern):
                     if value is None:
                         continue
                     text = str(value)
-                    matches = find_matches(text, pattern)
+                    matches = find_matches(text, pattern, exclude_pattern)
                     for _, _, keyword, snippet in matches:
                         rows.append((f"{worksheet.title}!{cell.coordinate}", keyword, snippet))
                         if len(rows) >= MAX_HITS_PER_FILE:
@@ -121,7 +121,7 @@ def search_xlsx(path, pattern):
     return rows
 
 
-def search_xls(path, pattern):
+def search_xls(path, pattern, exclude_pattern=None):
     if xlrd is None:
         raise RuntimeError("xlrd가 설치되지 않았습니다.")
 
@@ -135,7 +135,7 @@ def search_xls(path, pattern):
                     if value in (None, ""):
                         continue
                     text = str(value)
-                    for _, _, keyword, snippet in find_matches(text, pattern):
+                    for _, _, keyword, snippet in find_matches(text, pattern, exclude_pattern):
                         cell_name = f"{xlrd.formula.colname(col_index)}{row_index + 1}"
                         rows.append((f"{sheet.name}!{cell_name}", keyword, snippet))
                         if len(rows) >= MAX_HITS_PER_FILE:
@@ -146,7 +146,7 @@ def search_xls(path, pattern):
     return rows
 
 
-def search_docx(path, pattern):
+def search_docx(path, pattern, exclude_pattern=None):
     if Document is None:
         raise RuntimeError("python-docx가 설치되지 않았습니다.")
 
@@ -155,7 +155,7 @@ def search_docx(path, pattern):
 
     for index, paragraph in enumerate(doc.paragraphs, start=1):
         text = paragraph.text
-        for _, _, keyword, snippet in find_matches(text, pattern):
+        for _, _, keyword, snippet in find_matches(text, pattern, exclude_pattern):
             rows.append((f"문단 {index}", keyword, snippet))
             if len(rows) >= MAX_HITS_PER_FILE:
                 return rows
@@ -164,7 +164,7 @@ def search_docx(path, pattern):
         for row_index, row in enumerate(table.rows, start=1):
             for col_index, cell in enumerate(row.cells, start=1):
                 text = cell.text
-                for _, _, keyword, snippet in find_matches(text, pattern):
+                for _, _, keyword, snippet in find_matches(text, pattern, exclude_pattern):
                     rows.append((f"표 {table_index} / {row_index}행 {col_index}열", keyword, snippet))
                     if len(rows) >= MAX_HITS_PER_FILE:
                         return rows
@@ -192,7 +192,7 @@ def extract_shape_text(shape):
     return texts
 
 
-def search_pptx(path, pattern):
+def search_pptx(path, pattern, exclude_pattern=None):
     if Presentation is None:
         raise RuntimeError("python-pptx가 설치되지 않았습니다.")
 
@@ -202,7 +202,7 @@ def search_pptx(path, pattern):
     for slide_index, slide in enumerate(presentation.slides, start=1):
         for shape in slide.shapes:
             for text in extract_shape_text(shape):
-                for _, _, keyword, snippet in find_matches(text, pattern):
+                for _, _, keyword, snippet in find_matches(text, pattern, exclude_pattern):
                     rows.append((f"{slide_index}슬라이드", keyword, snippet))
                     if len(rows) >= MAX_HITS_PER_FILE:
                         return rows
@@ -210,7 +210,7 @@ def search_pptx(path, pattern):
     return rows
 
 
-def search_hwpx(path, pattern):
+def search_hwpx(path, pattern, exclude_pattern=None):
     """
     HWPX는 ZIP 기반 XML 형식이다.
     XML에 포함된 텍스트를 추출해 검색한다.
@@ -235,7 +235,7 @@ def search_hwpx(path, pattern):
             except ET.ParseError:
                 text = raw.decode("utf-8", errors="ignore")
 
-            for _, _, keyword, snippet in find_matches(text, pattern):
+            for _, _, keyword, snippet in find_matches(text, pattern, exclude_pattern):
                 location = Path(name).name
                 rows.append((f"HWPX/{location}", keyword, snippet))
                 if len(rows) >= MAX_HITS_PER_FILE:
@@ -244,22 +244,22 @@ def search_hwpx(path, pattern):
     return rows
 
 
-def search_file_contents(path, pattern):
+def search_file_contents(path, pattern, exclude_pattern=None):
     ext = path.suffix.lower()
 
     if ext in TEXT_EXTENSIONS:
-        return search_text_file(path, pattern)
+        return search_text_file(path, pattern, exclude_pattern)
     if ext == ".pdf":
-        return search_pdf(path, pattern)
+        return search_pdf(path, pattern, exclude_pattern)
     if ext in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
-        return search_xlsx(path, pattern)
+        return search_xlsx(path, pattern, exclude_pattern)
     if ext == ".xls":
-        return search_xls(path, pattern)
+        return search_xls(path, pattern, exclude_pattern)
     if ext == ".docx":
-        return search_docx(path, pattern)
+        return search_docx(path, pattern, exclude_pattern)
     if ext == ".pptx":
-        return search_pptx(path, pattern)
+        return search_pptx(path, pattern, exclude_pattern)
     if ext == ".hwpx":
-        return search_hwpx(path, pattern)
+        return search_hwpx(path, pattern, exclude_pattern)
 
     return []

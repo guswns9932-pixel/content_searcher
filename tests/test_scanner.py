@@ -97,6 +97,33 @@ def test_scan_attributes_matched_keyword_via_build_pattern(tmp_path):
     assert set(results) == {("a.txt", "invoice"), ("b.txt", "receipt")}
 
 
+def test_scan_exclude_pattern_drops_units_containing_it(tmp_path):
+    (tmp_path / "a.txt").write_text("this is a draft invoice", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("this is a final invoice", encoding="utf-8")
+
+    pattern = build_pattern("invoice", use_wildcard=False, case_sensitive=True)
+    exclude_pattern = build_pattern("draft", use_wildcard=False, case_sensitive=True)
+    results = []
+
+    processed, total_hits, file_count = scan(
+        folder=tmp_path,
+        pattern=pattern,
+        exclude_pattern=exclude_pattern,
+        include_subfolders=True,
+        search_filename=False,
+        search_contents=True,
+        extensions=set(),
+        is_cancelled=never_cancelled,
+        on_file_start=lambda index, path: None,
+        on_file_result=lambda path, location, keyword, snippet: results.append(path.name),
+        on_error=lambda message: None,
+        max_workers=4,
+    )
+
+    assert file_count == 1
+    assert results == ["b.txt"]
+
+
 def test_scan_respects_extension_filter(tmp_path):
     (tmp_path / "a.txt").write_text("keyword here", encoding="utf-8")
     (tmp_path / "b.log").write_text("keyword here too", encoding="utf-8")

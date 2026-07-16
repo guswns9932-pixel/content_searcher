@@ -190,6 +190,7 @@ class ContentSearchApp(tk.Tk):
 
         self.folder_var = tk.StringVar()
         self.keyword_var = tk.StringVar()
+        self.exclude_keyword_var = tk.StringVar()
         self.extension_var = tk.StringVar()
         self.subfolder_var = tk.BooleanVar(value=True)
         self.case_sensitive_var = tk.BooleanVar(value=False)
@@ -311,16 +312,26 @@ class ContentSearchApp(tk.Tk):
             row=1, column=2, sticky="w", padx=(8, 0), pady=6
         )
 
-        ttk.Label(search_frame, text="확장자 필터").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=6)
+        ttk.Label(search_frame, text="제외 키워드").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=6)
+        exclude_keyword_entry = ttk.Entry(search_frame, textvariable=self.exclude_keyword_var)
+        exclude_keyword_entry.grid(row=2, column=1, sticky="ew", pady=6)
+        exclude_keyword_entry.bind("<Return>", lambda event: self.start_search())
+        ttk.Label(
+            search_frame,
+            text="검색 키워드가 일치해도 이 단어가 같이 있으면 결과에서 제외",
+            style="Muted.TLabel",
+        ).grid(row=2, column=2, sticky="w", padx=(8, 0), pady=6)
+
+        ttk.Label(search_frame, text="확장자 필터").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=6)
         extension_entry = ttk.Entry(search_frame, textvariable=self.extension_var)
-        extension_entry.grid(row=2, column=1, sticky="ew", pady=6)
+        extension_entry.grid(row=3, column=1, sticky="ew", pady=6)
         extension_entry.bind("<Return>", lambda event: self.start_search())
         ttk.Label(search_frame, text="예: txt, pdf (비워두면 전체)", style="Muted.TLabel").grid(
-            row=2, column=2, sticky="w", padx=(8, 0), pady=6
+            row=3, column=2, sticky="w", padx=(8, 0), pady=6
         )
 
         option_frame = ttk.Frame(search_frame)
-        option_frame.grid(row=3, column=1, columnspan=2, sticky="w", pady=(6, 0))
+        option_frame.grid(row=4, column=1, columnspan=2, sticky="w", pady=(6, 0))
 
         ttk.Checkbutton(option_frame, text="하위 폴더 포함", variable=self.subfolder_var).pack(side="left", padx=(0, 14))
         ttk.Checkbutton(option_frame, text="대소문자 구분", variable=self.case_sensitive_var).pack(side="left", padx=(0, 14))
@@ -450,12 +461,21 @@ class ContentSearchApp(tk.Tk):
             messagebox.showwarning("검색 범위", "파일명 검색 또는 파일 내부 검색 중 하나 이상을 선택하세요.")
             return
 
+        exclude_keywords = parse_keywords(self.exclude_keyword_var.get())
+
         try:
             pattern = build_pattern(
                 keywords,
                 self.wildcard_var.get(),
                 self.case_sensitive_var.get()
             )
+            exclude_pattern = None
+            if exclude_keywords:
+                exclude_pattern = build_pattern(
+                    exclude_keywords,
+                    self.wildcard_var.get(),
+                    self.case_sensitive_var.get()
+                )
         except re.error as exc:
             messagebox.showerror("검색어 오류", f"검색어를 처리할 수 없습니다.\n\n{exc}")
             return
@@ -473,6 +493,7 @@ class ContentSearchApp(tk.Tk):
         options = {
             "folder": Path(folder),
             "pattern": pattern,
+            "exclude_pattern": exclude_pattern,
             "include_subfolders": self.subfolder_var.get(),
             "search_filename": self.filename_var.get(),
             "search_contents": self.contents_var.get(),
@@ -514,6 +535,7 @@ class ContentSearchApp(tk.Tk):
             processed, total_hits, file_count = scan(
                 folder=options["folder"],
                 pattern=options["pattern"],
+                exclude_pattern=options["exclude_pattern"],
                 include_subfolders=options["include_subfolders"],
                 search_filename=options["search_filename"],
                 search_contents=options["search_contents"],
