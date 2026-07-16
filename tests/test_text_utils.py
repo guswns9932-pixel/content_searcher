@@ -1,7 +1,5 @@
 import re
 
-import pytest
-
 from content_search.text_utils import (
     MAX_HITS_PER_FILE,
     build_pattern,
@@ -47,25 +45,45 @@ def test_find_matches_caps_at_max_hits_per_file():
 
 
 def test_build_pattern_literal_is_case_insensitive_by_default():
-    pattern = build_pattern("Cat", use_regex=False, case_sensitive=False)
+    pattern = build_pattern("Cat", use_wildcard=False, case_sensitive=False)
     assert pattern.search("a cat sat")
 
 
 def test_build_pattern_literal_case_sensitive():
-    pattern = build_pattern("Cat", use_regex=False, case_sensitive=True)
+    pattern = build_pattern("Cat", use_wildcard=False, case_sensitive=True)
     assert pattern.search("a Cat sat")
     assert not pattern.search("a cat sat")
 
 
 def test_build_pattern_literal_escapes_special_chars():
-    pattern = build_pattern("a.b", use_regex=False, case_sensitive=True)
+    pattern = build_pattern("a.b", use_wildcard=False, case_sensitive=True)
     assert pattern.search("a.b")
     assert not pattern.search("aXb")
 
 
-def test_build_pattern_invalid_regex_raises():
-    with pytest.raises(re.error):
-        build_pattern("(", use_regex=True, case_sensitive=True)
+def test_build_pattern_wildcard_star_matches_any_length():
+    pattern = build_pattern("invoice*2024", use_wildcard=True, case_sensitive=True)
+    assert pattern.search("this is invoice number 2024 total")
+    assert not pattern.search("invoice 2023")
+
+
+def test_build_pattern_wildcard_question_mark_matches_exactly_one_char():
+    pattern = build_pattern("b?d", use_wildcard=True, case_sensitive=True)
+    assert pattern.search("the bad dog")
+    assert not pattern.search("the bd dog")  # '?' requires exactly one character
+    assert not pattern.search("the byyd dog")  # two characters, not one
+
+
+def test_build_pattern_wildcard_still_escapes_literal_regex_chars():
+    pattern = build_pattern("a.b*c", use_wildcard=True, case_sensitive=True)
+    assert pattern.search("a.b---c")
+    assert not pattern.search("aXb---c")  # literal '.' must not act as regex wildcard
+
+
+def test_build_pattern_wildcard_never_raises_on_arbitrary_input():
+    # 순수 문자 치환이라 정규식 특수문자가 섞여도 컴파일 오류가 나지 않는다.
+    pattern = build_pattern("(weird [input", use_wildcard=True, case_sensitive=True)
+    assert pattern.search("(weird [input")
 
 
 def test_parse_extension_filter_empty_means_no_filter():

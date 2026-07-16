@@ -64,6 +64,52 @@ def build_app_icon(size=32):
     return image
 
 
+def _segment_distance(px, py, x1, y1, x2, y2):
+    dx, dy = x2 - x1, y2 - y1
+    length_sq = dx * dx + dy * dy
+    if length_sq == 0:
+        return math.hypot(px - x1, py - y1)
+    t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / length_sq))
+    proj_x, proj_y = x1 + t * dx, y1 + t * dy
+    return math.hypot(px - proj_x, py - proj_y)
+
+
+def build_checkbox_images(size=15):
+    """
+    ttk 'clam' 테마의 체크박스가 체크 시 'X' 모양으로 그려지는 것을 대신할,
+    실제 체크마크(✓) 모양의 인디케이터 이미지 두 장(선택 안 됨/선택됨)을 그린다.
+    """
+    border = "#9ca3af"
+    unchecked = tk.PhotoImage(width=size, height=size)
+    checked = tk.PhotoImage(width=size, height=size)
+
+    unchecked.put("#ffffff", to=(0, 0, size, size))
+    checked.put(ACCENT_COLOR, to=(0, 0, size, size))
+
+    for i in range(size):
+        for image in (unchecked, checked):
+            image.put(border, (i, 0))
+            image.put(border, (i, size - 1))
+            image.put(border, (0, i))
+            image.put(border, (size - 1, i))
+
+    p1 = (size * 0.22, size * 0.52)
+    p2 = (size * 0.42, size * 0.74)
+    p3 = (size * 0.80, size * 0.26)
+    thickness = max(1.2, size * 0.12)
+
+    for y in range(size):
+        for x in range(size):
+            distance = min(
+                _segment_distance(x + 0.5, y + 0.5, *p1, *p2),
+                _segment_distance(x + 0.5, y + 0.5, *p2, *p3),
+            )
+            if distance <= thickness:
+                checked.put("#ffffff", (x, y))
+
+    return unchecked, checked
+
+
 def open_path(path):
     """OS별 기본 연결 프로그램으로 파일을 연다."""
     path = str(path)
@@ -97,7 +143,7 @@ class ContentSearchApp(tk.Tk):
         self.extension_var = tk.StringVar()
         self.subfolder_var = tk.BooleanVar(value=True)
         self.case_sensitive_var = tk.BooleanVar(value=False)
-        self.regex_var = tk.BooleanVar(value=False)
+        self.wildcard_var = tk.BooleanVar(value=False)
         self.filename_var = tk.BooleanVar(value=True)
         self.contents_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="폴더와 키워드를 입력하세요.")
@@ -152,6 +198,18 @@ class ContentSearchApp(tk.Tk):
 
         style.configure("TProgressbar", background=ACCENT_COLOR, troughcolor="#e5e7eb")
 
+        self._checkbox_images = build_checkbox_images()
+        unchecked_img, checked_img = self._checkbox_images
+        style.element_create("Check.Checkbutton.indicator", "image", unchecked_img, ("selected", checked_img))
+        style.layout("TCheckbutton", [
+            ("Checkbutton.padding", {"sticky": "nswe", "children": [
+                ("Check.Checkbutton.indicator", {"side": "left", "sticky": ""}),
+                ("Checkbutton.focus", {"side": "left", "sticky": "", "children": [
+                    ("Checkbutton.label", {"sticky": "nswe"}),
+                ]}),
+            ]}),
+        ])
+
     def _build_menu(self):
         menubar = tk.Menu(self)
 
@@ -169,7 +227,7 @@ class ContentSearchApp(tk.Tk):
         messagebox.showinfo(
             "프로그램 정보",
             f"{APP_TITLE}\n버전 {APP_VERSION}\n\n"
-            "지정한 폴더의 파일명과 파일 내부 텍스트를 키워드/정규식으로 검색합니다."
+            "지정한 폴더의 파일명과 파일 내부 텍스트를 키워드 또는 와일드카드(*, ?)로 검색합니다."
         )
 
     def _build_ui(self):
@@ -181,7 +239,7 @@ class ContentSearchApp(tk.Tk):
         ttk.Label(header, text=APP_TITLE, style="Header.TLabel").pack(anchor="w")
         ttk.Label(
             header,
-            text="폴더 안의 파일명과 파일 내부 텍스트를 키워드 또는 정규식으로 검색합니다.",
+            text="폴더 안의 파일명과 파일 내부 텍스트를 키워드 또는 와일드카드(*, ?)로 검색합니다.",
             style="Sub.TLabel",
         ).pack(anchor="w")
 
@@ -213,7 +271,7 @@ class ContentSearchApp(tk.Tk):
 
         ttk.Checkbutton(option_frame, text="하위 폴더 포함", variable=self.subfolder_var).pack(side="left", padx=(0, 14))
         ttk.Checkbutton(option_frame, text="대소문자 구분", variable=self.case_sensitive_var).pack(side="left", padx=(0, 14))
-        ttk.Checkbutton(option_frame, text="정규식 사용", variable=self.regex_var).pack(side="left", padx=(0, 14))
+        ttk.Checkbutton(option_frame, text="와일드카드 사용 (*, ?)", variable=self.wildcard_var).pack(side="left", padx=(0, 14))
         ttk.Checkbutton(option_frame, text="파일명 검색", variable=self.filename_var).pack(side="left", padx=(0, 14))
         ttk.Checkbutton(option_frame, text="파일 내부 검색", variable=self.contents_var).pack(side="left")
 
@@ -329,11 +387,11 @@ class ContentSearchApp(tk.Tk):
         try:
             pattern = build_pattern(
                 keyword,
-                self.regex_var.get(),
+                self.wildcard_var.get(),
                 self.case_sensitive_var.get()
             )
         except re.error as exc:
-            messagebox.showerror("정규식 오류", f"정규식이 올바르지 않습니다.\n\n{exc}")
+            messagebox.showerror("검색어 오류", f"검색어를 처리할 수 없습니다.\n\n{exc}")
             return
 
         extensions = parse_extension_filter(self.extension_var.get())

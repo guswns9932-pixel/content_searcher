@@ -43,9 +43,25 @@ def find_matches(text, pattern):
     return results
 
 
-def build_pattern(keyword, use_regex, case_sensitive):
+def _wildcard_to_regex(keyword):
+    """
+    '*'(임의 길이 문자열)와 '?'(문자 1개)만 지원하는 와일드카드 표현을
+    부분 문자열 검색용 정규식 조각으로 바꾼다(전체 일치가 아닌 finditer용).
+    """
+    parts = []
+    for char in keyword:
+        if char == "*":
+            parts.append(".*")
+        elif char == "?":
+            parts.append(".")
+        else:
+            parts.append(re.escape(char))
+    return "".join(parts)
+
+
+def build_pattern(keyword, use_wildcard, case_sensitive):
     flags = 0 if case_sensitive else re.IGNORECASE
-    expression = keyword if use_regex else re.escape(keyword)
+    expression = _wildcard_to_regex(keyword) if use_wildcard else re.escape(keyword)
     return re.compile(expression, flags)
 
 
